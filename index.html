@@ -1,0 +1,513 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Trời Hôm Nay - Dự Báo Thời Tiết</title>
+<meta name="description" content="Dự báo thời tiết chi tiết theo đúng vị trí thiết bị - mây, mưa từng giờ">
+<meta name="theme-color" content="#16233D">
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Trời Hôm Nay">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --sky-deep:#16233D; --sky-mid:#2E4A6B; --sky-hi:#3F6690;
+  --cloud:#A8B4C4; --cloud-lt:#DCE4F0; --cloud-dk:#C7D2E3;
+  --rain-lt:#BEE7F5; --rain-dk:#1E88C7;
+  --sun:#FFB454; --sun-glow:rgba(255,180,84,.35);
+  --ink:#F2F5F9; --ink-dim:#9FB0C7; --ink-dim2:#6E829E;
+  --card:rgba(255,255,255,.06); --card-bd:rgba(255,255,255,.10);
+  --r:18px; --r-sm:12px;
+}
+*{box-sizing:border-box; -webkit-tap-highlight-color:transparent}
+html,body{margin:0;padding:0;height:100%}
+body{
+  font-family:'Inter',sans-serif; color:var(--ink);
+  background: linear-gradient(160deg, var(--sky-deep) 0%, var(--sky-mid) 55%, var(--sky-hi) 100%);
+  background-attachment:fixed;
+  min-height:100vh; padding-bottom:40px;
+  overflow-x:hidden;
+}
+.mono{font-family:'JetBrains Mono',monospace}
+.disp{font-family:'Space Grotesk',sans-serif}
+
+/* ===== Nền động: các lớp mây trôi nhẹ phía sau, tạo chiều sâu bầu trời ===== */
+.sky-layer{position:fixed; inset:0; z-index:0; pointer-events:none; overflow:hidden}
+.sky-layer svg{position:absolute; opacity:.10}
+.drift1{top:8%; width:140%; left:-20%; animation:drift 70s linear infinite}
+.drift2{top:32%; width:160%; left:-30%; animation:drift 100s linear infinite reverse; opacity:.06}
+@keyframes drift{ from{transform:translateX(0)} to{transform:translateX(6%)} }
+@media (prefers-reduced-motion: reduce){ .drift1,.drift2{animation:none} }
+
+.wrap{position:relative; z-index:1; max-width:480px; margin:0 auto; padding:16px 16px 0}
+
+/* ===== Top bar ===== */
+.topbar{display:flex; align-items:center; justify-content:space-between; padding:4px 2px 14px}
+.brand{display:flex; align-items:center; gap:8px}
+.brand-ico{width:26px; height:26px}
+.brand-name{font-family:'Space Grotesk',sans-serif; font-weight:600; font-size:15px; letter-spacing:.2px}
+.refresh-btn{
+  width:34px; height:34px; border-radius:50%; border:1px solid var(--card-bd); background:var(--card);
+  display:flex; align-items:center; justify-content:center; cursor:pointer; color:var(--ink);
+}
+.refresh-btn svg{width:16px; height:16px; transition:transform .5s ease}
+.refresh-btn.spin svg{animation:spin 1s linear infinite}
+@keyframes spin{ to{transform:rotate(360deg)} }
+
+/* ===== Hero ===== */
+.hero{text-align:center; padding:10px 0 26px}
+.loc-row{display:flex; align-items:center; justify-content:center; gap:6px; color:var(--ink-dim); font-size:13px; margin-bottom:4px}
+.loc-row svg{width:13px; height:13px; flex:0 0 auto}
+.loc-name{white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:280px}
+.hero-ico{width:92px; height:92px; margin:6px auto 2px}
+.temp-big{font-family:'Space Grotesk',sans-serif; font-weight:700; font-size:76px; line-height:1; letter-spacing:-2px}
+.temp-big sup{font-size:32px; font-weight:500; top:-.55em}
+.desc{font-size:16px; color:var(--ink); margin-top:2px}
+.feels{font-size:13px; color:var(--ink-dim); margin-top:4px}
+.hi-lo{font-size:13px; color:var(--ink-dim); margin-top:6px}
+.hi-lo b{color:var(--ink); font-weight:600}
+
+/* ===== Thẻ chung ===== */
+.card{
+  background:var(--card); border:1px solid var(--card-bd); border-radius:var(--r);
+  padding:16px; margin-bottom:14px; backdrop-filter:blur(6px);
+}
+.card-title{font-size:12.5px; font-weight:600; color:var(--ink-dim); letter-spacing:.4px; text-transform:uppercase; margin-bottom:12px; display:flex; align-items:center; justify-content:space-between}
+
+/* ===== Dải mây & mưa 24 giờ (thành phần chủ đạo) ===== */
+.strip-scroll{display:flex; gap:2px; overflow-x:auto; padding-bottom:4px; scrollbar-width:none; -ms-overflow-style:none}
+.strip-scroll::-webkit-scrollbar{display:none}
+.hour-col{flex:0 0 auto; width:46px; display:flex; flex-direction:column; align-items:center; padding-top:2px}
+.hour-col .h-temp{font-size:11px; color:var(--ink-dim); margin-bottom:2px; font-family:'JetBrains Mono',monospace}
+.hour-col svg{display:block}
+.hour-col .h-label{font-size:10.5px; color:var(--ink-dim2); margin-top:6px; font-family:'JetBrains Mono',monospace}
+.hour-col.now .h-label{color:var(--sun); font-weight:600}
+.hour-col .h-prob{font-size:9.5px; color:var(--rain-lt); margin-top:1px; font-family:'JetBrains Mono',monospace; height:12px}
+
+/* ===== Lưới chi tiết ===== */
+.detail-grid{display:grid; grid-template-columns:repeat(2,1fr); gap:10px}
+.detail-item{
+  background:rgba(255,255,255,.04); border:1px solid var(--card-bd); border-radius:var(--r-sm);
+  padding:12px 14px;
+}
+.detail-item .d-label{font-size:11px; color:var(--ink-dim); display:flex; align-items:center; gap:6px}
+.detail-item .d-label svg{width:13px; height:13px}
+.detail-item .d-val{font-family:'Space Grotesk',sans-serif; font-size:20px; font-weight:600; margin-top:4px}
+.detail-item .d-sub{font-size:10.5px; color:var(--ink-dim2); margin-top:1px}
+
+/* ===== Dự báo nhiều ngày ===== */
+.days-row{display:flex; flex-direction:column; gap:2px}
+.day-item{display:flex; align-items:center; padding:9px 2px; border-bottom:1px solid rgba(255,255,255,.06)}
+.day-item:last-child{border-bottom:none}
+.day-name{width:78px; font-size:13.5px; color:var(--ink)}
+.day-name.today{color:var(--sun); font-weight:600}
+.day-ico{width:26px; height:26px; margin:0 10px 0 0; flex:0 0 auto}
+.day-rain{width:34px; font-size:11px; color:var(--rain-lt); font-family:'JetBrains Mono',monospace; text-align:right; margin-right:8px}
+.day-bar-wrap{flex:1; display:flex; align-items:center; gap:8px}
+.day-lo{font-size:12.5px; color:var(--ink-dim2); font-family:'JetBrains Mono',monospace; width:26px}
+.day-bar-track{flex:1; height:4px; border-radius:3px; background:rgba(255,255,255,.10); position:relative; overflow:hidden}
+.day-bar-fill{position:absolute; height:100%; border-radius:3px; background:linear-gradient(90deg, var(--cloud), var(--sun))}
+.day-hi{font-size:12.5px; color:var(--ink); font-family:'JetBrains Mono',monospace; width:26px; font-weight:600}
+
+/* ===== Trạng thái tải / lỗi ===== */
+.status-line{
+  display:flex; align-items:center; justify-content:center; gap:8px; color:var(--ink-dim);
+  font-size:12.5px; padding:40px 20px; text-align:center;
+}
+.status-line .dot{width:6px;height:6px;border-radius:50%; background:var(--sun); animation:pulse 1.2s ease infinite}
+@keyframes pulse{ 0%,100%{opacity:.3} 50%{opacity:1} }
+.hidden{display:none !important}
+
+footer{text-align:center; color:var(--ink-dim2); font-size:11px; padding:18px 16px 4px; line-height:1.6}
+footer a{color:var(--ink-dim); text-decoration:none}
+
+.install-tip{
+  display:flex; align-items:center; gap:10px; background:var(--card); border:1px solid var(--card-bd);
+  border-radius:var(--r-sm); padding:11px 14px; margin-bottom:14px; font-size:12.5px; color:var(--ink-dim);
+}
+.install-tip svg{width:18px; height:18px; flex:0 0 auto; color:var(--sun)}
+.install-tip b{color:var(--ink)}
+</style>
+</head>
+<body>
+
+<div class="sky-layer">
+  <svg class="drift1" viewBox="0 0 400 100" xmlns="http://www.w3.org/2000/svg"><ellipse cx="80" cy="50" rx="70" ry="26" fill="#fff"/><ellipse cx="150" cy="40" rx="50" ry="20" fill="#fff"/><ellipse cx="300" cy="55" rx="60" ry="22" fill="#fff"/></svg>
+  <svg class="drift2" viewBox="0 0 400 100" xmlns="http://www.w3.org/2000/svg"><ellipse cx="60" cy="60" rx="90" ry="30" fill="#fff"/><ellipse cx="260" cy="45" rx="55" ry="22" fill="#fff"/></svg>
+</div>
+
+<div class="wrap">
+
+  <div class="topbar">
+    <div class="brand">
+      <svg class="brand-ico" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="15" cy="9" r="4.2" fill="#FFB454"/><path d="M6.5 18a4 4 0 0 1 .6-7.96 5 5 0 0 1 9.5-1.9A4.5 4.5 0 0 1 16.5 18h-10Z" fill="#DCE4F0"/></svg>
+      <span class="brand-name">Trời Hôm Nay</span>
+    </div>
+    <button class="refresh-btn" id="btn-refresh" title="Làm mới ngay">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 12a9 9 0 0 1 15.3-6.4L21 8M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-15.3 6.4L3 16M3 21v-5h5"/></svg>
+    </button>
+  </div>
+
+  <div id="status-loading" class="status-line">
+    <span class="dot"></span> Đang xác định vị trí và tải dữ liệu thời tiết...
+  </div>
+
+  <div id="app-content" class="hidden">
+
+    <div class="hero">
+      <div class="loc-row">
+        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C7.6 2 4 5.6 4 10c0 6 8 12 8 12s8-6 8-12c0-4.4-3.6-8-8-8Zm0 11a3 3 0 1 1 0-6 3 3 0 0 1 0 6Z"/></svg>
+        <span class="loc-name" id="loc-name">--</span>
+      </div>
+      <div class="hero-ico" id="hero-ico"></div>
+      <div class="temp-big" id="temp-now">--<sup>°C</sup></div>
+      <div class="desc" id="desc-now">--</div>
+      <div class="feels" id="feels-now">--</div>
+      <div class="hi-lo" id="hilo-now">--</div>
+    </div>
+
+    <div class="install-tip" id="install-tip">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12m0 0-4-4m4 4 4-4"/><path d="M5 17v2a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-2"/></svg>
+      <span><b>Cài vào máy:</b> mở menu trình duyệt (⋮ hoặc chia sẻ) → chọn "Thêm vào Màn hình chính" để dùng như app thật.</span>
+    </div>
+
+    <div class="card">
+      <div class="card-title">
+        <span>Mây &amp; mưa 24 giờ tới</span>
+        <span id="strip-updated" class="mono" style="text-transform:none; font-weight:400; font-size:10.5px">--</span>
+      </div>
+      <div class="strip-scroll" id="hour-strip"></div>
+    </div>
+
+    <div class="detail-grid">
+      <div class="detail-item">
+        <div class="d-label"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2.7s6 6.6 6 11a6 6 0 1 1-12 0c0-4.4 6-11 6-11Z"/></svg> Độ ẩm</div>
+        <div class="d-val" id="d-humidity">--%</div>
+        <div class="d-sub" id="d-humidity-sub">&nbsp;</div>
+      </div>
+      <div class="detail-item">
+        <div class="d-label"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 8h11a3 3 0 1 0-3-3M3 16h15a3 3 0 1 1-3 3M3 12h8"/></svg> Gió</div>
+        <div class="d-val" id="d-wind">--</div>
+        <div class="d-sub" id="d-wind-sub">&nbsp;</div>
+      </div>
+      <div class="detail-item">
+        <div class="d-label"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22a8 8 0 0 0 8-8c0-4-8-11-8-11S4 10 4 14a8 8 0 0 0 8 8Z"/></svg> Lượng mưa hiện tại</div>
+        <div class="d-val" id="d-precip">--</div>
+        <div class="d-sub" id="d-precip-sub">&nbsp;</div>
+      </div>
+      <div class="detail-item">
+        <div class="d-label"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg> Áp suất</div>
+        <div class="d-val" id="d-pressure">--</div>
+        <div class="d-sub">hPa</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title"><span>Dự báo 7 ngày tới</span></div>
+      <div class="days-row" id="days-row"></div>
+    </div>
+
+    <footer>
+      Cập nhật lúc <span id="last-updated" class="mono">--</span> · tự làm mới mỗi 10 phút<br>
+      Dữ liệu: <a href="https://open-meteo.com" target="_blank" rel="noopener">Open-Meteo</a>
+    </footer>
+
+  </div>
+
+  <div id="status-error" class="status-line hidden">
+    <span class="dot" style="background:#EF6B6B"></span> <span id="error-text">Chưa lấy được dữ liệu — đang tự thử lại...</span>
+  </div>
+
+</div>
+
+<script>
+'use strict';
+
+// ═══════════════════════════ CẤU HÌNH & TRẠNG THÁI ═══════════════════════════
+var RETRY_MS = 10000;      // lỗi thì tự thử lại sau 10 giây, lặp tới khi thành công
+var REFRESH_MS = 10*60000; // thành công thì tự làm mới lại sau mỗi 10 phút
+var _lastData = null;
+var _refreshTimer = null;
+
+var WEATHER_MAP = {
+  0:{t:'Trời quang đãng', ico:'sun'}, 1:{t:'Trời quang, ít mây', ico:'sun-cloud'},
+  2:{t:'Trời có mây rải rác', ico:'cloud-sun'}, 3:{t:'Trời nhiều mây', ico:'cloud'},
+  45:{t:'Sương mù', ico:'fog'}, 48:{t:'Sương mù đóng băng', ico:'fog'},
+  51:{t:'Mưa phùn nhẹ', ico:'drizzle'}, 53:{t:'Mưa phùn vừa', ico:'drizzle'}, 55:{t:'Mưa phùn nặng hạt', ico:'drizzle'},
+  56:{t:'Mưa phùn đóng băng nhẹ', ico:'drizzle'}, 57:{t:'Mưa phùn đóng băng nặng', ico:'drizzle'},
+  61:{t:'Mưa nhỏ', ico:'rain'}, 63:{t:'Mưa vừa', ico:'rain'}, 65:{t:'Mưa to', ico:'rain-heavy'},
+  66:{t:'Mưa đóng băng nhẹ', ico:'rain'}, 67:{t:'Mưa đóng băng nặng', ico:'rain-heavy'},
+  71:{t:'Tuyết rơi nhẹ', ico:'snow'}, 73:{t:'Tuyết rơi vừa', ico:'snow'}, 75:{t:'Tuyết rơi dày', ico:'snow'}, 77:{t:'Hạt tuyết', ico:'snow'},
+  80:{t:'Mưa rào nhẹ', ico:'rain'}, 81:{t:'Mưa rào vừa', ico:'rain-heavy'}, 82:{t:'Mưa rào to', ico:'rain-heavy'},
+  85:{t:'Mưa tuyết rào nhẹ', ico:'snow'}, 86:{t:'Mưa tuyết rào to', ico:'snow'},
+  95:{t:'Có dông', ico:'storm'}, 96:{t:'Dông kèm mưa đá nhẹ', ico:'storm'}, 99:{t:'Dông kèm mưa đá to', ico:'storm'}
+};
+function wInfo(code){ return WEATHER_MAP[code] || {t:'Không rõ tình trạng', ico:'cloud'}; }
+
+// ═══════════════════════════ VẼ HÌNH (SVG tự vẽ, không dùng thư viện) ═══════════════════════════
+function mixColor(hexA, hexB, t){
+  t = Math.max(0, Math.min(1, t));
+  function h2r(h){ h=h.replace('#',''); return [parseInt(h.slice(0,2),16),parseInt(h.slice(2,4),16),parseInt(h.slice(4,6),16)]; }
+  var a=h2r(hexA), b=h2r(hexB);
+  var r=Math.round(a[0]+(b[0]-a[0])*t), g=Math.round(a[1]+(b[1]-a[1])*t), bl=Math.round(a[2]+(b[2]-a[2])*t);
+  return 'rgb('+r+','+g+','+bl+')';
+}
+// Cụm mây nhiều tầng — độ mờ tăng dần theo % che phủ mây thật, luôn còn le lói 1 chút kể cả trời quang
+function cloudGroup(coverPct, isDay){
+  var op = 0.12 + (coverPct/100)*0.80;
+  var base = isDay ? '#E8EDF5' : '#5D6E88';
+  var shade = isDay ? '#C7D2E3' : '#40506A';
+  return '<g opacity="'+op.toFixed(2)+'">'
+    + '<ellipse cx="10" cy="17" rx="9" ry="6.5" fill="'+shade+'"/>'
+    + '<ellipse cx="23" cy="12" rx="11.5" ry="8.5" fill="'+base+'"/>'
+    + '<ellipse cx="36" cy="16" rx="8.5" ry="6" fill="'+shade+'"/>'
+    + '<rect x="8" y="16" width="30" height="7" rx="3.5" fill="'+base+'"/>'
+    + '</g>';
+}
+// Cột mưa — chiều cao theo % khả năng mưa, độ đậm màu theo lượng mưa (mm)
+function rainBars(probPct, mm){
+  if (probPct < 8) return '';
+  var h = Math.round((probPct/100) * 20);
+  var color = mixColor('#BEE7F5', '#0E6FA8', Math.min(mm/3, 1));
+  var y = 30 - h;
+  var out = '';
+  var xs = [12, 20, 28];
+  for (var i=0;i<xs.length;i++){
+    var hh = Math.max(3, h - (i===1?0:3));
+    var yy = 30 - hh;
+    out += '<rect x="'+(xs[i]-1.6)+'" y="'+yy+'" width="3.2" height="'+hh+'" rx="1.6" fill="'+color+'" opacity="0.92"/>';
+  }
+  return out;
+}
+function sunGlyph(cx,cy,r,color){
+  var rays = '';
+  for (var i=0;i<8;i++){
+    var ang = i * Math.PI/4;
+    var x1 = cx + Math.cos(ang)*(r+3), y1 = cy + Math.sin(ang)*(r+3);
+    var x2 = cx + Math.cos(ang)*(r+7), y2 = cy + Math.sin(ang)*(r+7);
+    rays += '<line x1="'+x1.toFixed(1)+'" y1="'+y1.toFixed(1)+'" x2="'+x2.toFixed(1)+'" y2="'+y2.toFixed(1)+'" stroke="'+color+'" stroke-width="2" stroke-linecap="round"/>';
+  }
+  return '<g>'+rays+'<circle cx="'+cx+'" cy="'+cy+'" r="'+r+'" fill="'+color+'"/></g>';
+}
+// Icon nhỏ cho từng cột giờ / từng ngày — 46x30, kết hợp mặt trời (nếu ban ngày & ít mây) + mây + mưa
+function miniIcon(code, coverPct, precipProb, precipMm, isDay){
+  var info = wInfo(code);
+  var isClear = (code === 0); // trời quang đãng hoàn toàn — không vẽ lem mây, chỉ mặt trời/trăng thuần
+  var svg = '<svg width="46" height="30" viewBox="0 0 46 30" xmlns="http://www.w3.org/2000/svg">';
+  if (isDay && coverPct < 70 && info.ico.indexOf('rain')===-1 && info.ico!=='storm') {
+    svg += sunGlyph(30, 8, 5, '#FFB454').replace(/<g>/,'<g opacity="'+(isClear?1:(1-coverPct/140)).toFixed(2)+'">');
+  }
+  if (!isDay && coverPct < 70 && info.ico.indexOf('rain')===-1 && info.ico!=='storm') {
+    svg += '<circle cx="30" cy="8" r="4.5" fill="#EAF0FA" opacity="'+(isClear?0.95:(1-coverPct/140)).toFixed(2)+'"/>'
+         + '<circle cx="31.5" cy="6.5" r="3.6" fill="var(--sky-mid)" opacity="'+(isClear?0.9:0.5).toFixed(2)+'"/>'; // khuyết trăng lưỡi liềm nhẹ cho dễ phân biệt với mặt trời
+  }
+  if (!isClear) {
+    svg += cloudGroup(Math.max(coverPct, info.ico==='cloud'?55:(info.ico.indexOf('rain')!==-1||info.ico==='storm'?75:coverPct)), isDay);
+  }
+  svg += rainBars(precipProb, precipMm);
+  if (info.ico==='storm') svg += '<path d="M21 18l-3 6h4l-2 5" stroke="#FFB454" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/>';
+  svg += '</svg>';
+  return svg;
+}
+// Icon lớn cho hero — cùng hệ hoạ nhưng phóng to, có hiệu ứng nhẹ
+function heroIcon(code, coverPct, isDay){
+  var info = wInfo(code);
+  var isClear = (code === 0);
+  var svg = '<svg width="92" height="92" viewBox="0 0 92 92" xmlns="http://www.w3.org/2000/svg">';
+  var showSun = coverPct < 70 && info.ico.indexOf('rain')===-1 && info.ico!=='storm';
+  if (showSun) {
+    svg += '<g style="transform-origin:64px 26px; animation:spin 40s linear infinite">' + sunGlyph(64,26,15, isDay?'#FFB454':'#EAF0FA') + '</g>';
+    svg += '<circle cx="64" cy="26" r="20" fill="'+(isDay?'var(--sun-glow)':'rgba(220,228,240,.2)')+'"/>';
+  }
+  if (!isClear) {
+    var cloudScale = Math.max(coverPct, info.ico==='cloud'?60:(info.ico.indexOf('rain')!==-1||info.ico==='storm'?85:coverPct));
+    svg += '<g transform="translate(4,26) scale(1.9)">' + cloudGroup(cloudScale, isDay) + '</g>';
+  }
+  if (info.ico.indexOf('rain')!==-1 || info.ico==='storm' || info.ico==='drizzle') {
+    svg += '<g transform="translate(4,26) scale(1.9)">' + rainBars(info.ico==='drizzle'?45:(info.ico==='rain-heavy'||info.ico==='storm'?85:60), info.ico==='rain-heavy'?6:(info.ico==='drizzle'?0.5:2)) + '</g>';
+  }
+  if (info.ico==='storm') svg += '<path d="M44 60l-6 12h8l-4 10" stroke="#FFB454" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round"/>';
+  if (info.ico==='fog') svg += '<g stroke="#C7D2E3" stroke-width="3" stroke-linecap="round" opacity=".7"><line x1="14" y1="40" x2="78" y2="40"/><line x1="10" y1="50" x2="82" y2="50"/><line x1="18" y1="60" x2="74" y2="60"/></g>';
+  svg += '</svg>';
+  return svg;
+}
+
+// ═══════════════════════════ ĐỊNH VỊ + LẤY DỮ LIỆU ═══════════════════════════
+function setStatus(loading, errorMsg){
+  document.getElementById('status-loading').classList.toggle('hidden', !loading);
+  document.getElementById('status-error').classList.toggle('hidden', !errorMsg);
+  document.getElementById('app-content').classList.toggle('hidden', loading || !!errorMsg);
+  if (errorMsg) document.getElementById('error-text').textContent = errorMsg;
+}
+
+function fetchLocationName(lat, lon){
+  var url = 'https://api.bigdatacloud.net/data/reverse-geocode-client?latitude='+lat+'&longitude='+lon+'&localityLanguage=vi';
+  return fetch(url).then(function(r){ return r.json(); }).then(function(d){
+    var parts = [];
+    if (d.locality) parts.push(d.locality);
+    else if (d.city) parts.push(d.city);
+    if (d.principalSubdivision) parts.push(d.principalSubdivision);
+    return parts.length ? parts.join(', ') : (lat.toFixed(3)+', '+lon.toFixed(3));
+  }).catch(function(){ return lat.toFixed(3)+', '+lon.toFixed(3); });
+}
+
+function loadWeather(){
+  var btn = document.getElementById('btn-refresh');
+  btn.classList.add('spin');
+  if (!navigator.geolocation) { onFail('Thiết bị không hỗ trợ định vị'); return; }
+
+  navigator.geolocation.getCurrentPosition(function(pos){
+    var lat = pos.coords.latitude, lon = pos.coords.longitude;
+    var url = 'https://api.open-meteo.com/v1/forecast?latitude='+lat+'&longitude='+lon
+      + '&current=temperature_2m,relative_humidity_2m,apparent_temperature,weather_code,wind_speed_10m,wind_direction_10m,surface_pressure,cloud_cover,precipitation,is_day'
+      + '&hourly=temperature_2m,weather_code,cloud_cover,precipitation_probability,precipitation'
+      + '&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max,sunrise,sunset'
+      + '&timezone=auto&forecast_days=7';
+
+    Promise.all([
+      fetch(url).then(function(r){ return r.json(); }),
+      fetchLocationName(lat, lon)
+    ]).then(function(results){
+      var data = results[0], locName = results[1];
+      if (!data || !data.current) throw new Error('no-data');
+      render(data, locName);
+      _lastData = data;
+      btn.classList.remove('spin');
+      if (_refreshTimer) clearTimeout(_refreshTimer);
+      _refreshTimer = setTimeout(loadWeather, REFRESH_MS);
+    }).catch(function(){ onFail('Lỗi tải dữ liệu thời tiết — đang tự thử lại...'); });
+  }, function(err){
+    var msg = 'Không lấy được vị trí — đang tự thử lại...';
+    if (err && err.code === 1) msg = 'Chưa được cấp quyền định vị — hãy cho phép rồi app sẽ tự thử lại';
+    onFail(msg);
+  }, { enableHighAccuracy:false, timeout:12000, maximumAge:300000 });
+}
+function onFail(msg){
+  document.getElementById('btn-refresh').classList.remove('spin');
+  if (!_lastData) setStatus(false, msg); // chưa từng có dữ liệu -> hiện màn lỗi rõ ràng
+  // đã từng có dữ liệu rồi thì thôi, giữ nguyên màn hình cũ hiển thị, chỉ âm thầm thử lại nền dưới
+  if (_refreshTimer) clearTimeout(_refreshTimer);
+  _refreshTimer = setTimeout(loadWeather, RETRY_MS);
+}
+
+// ═══════════════════════════ HIỂN THỊ DỮ LIỆU ═══════════════════════════
+var WD = ['CN','T2','T3','T4','T5','T6','T7'];
+var COMPASS = ['Bắc','Đông Bắc','Đông','Đông Nam','Nam','Tây Nam','Tây','Tây Bắc'];
+function windDir(deg){ return COMPASS[Math.round(deg/45)%8]; }
+
+function render(data, locName){
+  setStatus(false, null);
+  var c = data.current;
+  var info = wInfo(c.weather_code);
+  var isDay = c.is_day === 1;
+
+  document.getElementById('loc-name').textContent = locName;
+  document.getElementById('hero-ico').innerHTML = heroIcon(c.weather_code, c.cloud_cover, isDay);
+  document.getElementById('temp-now').innerHTML = Math.round(c.temperature_2m) + '<sup>°C</sup>';
+  document.getElementById('desc-now').textContent = info.t + ' · Mây ' + Math.round(c.cloud_cover) + '%';
+  document.getElementById('feels-now').textContent = 'Cảm giác như ' + Math.round(c.apparent_temperature) + '°C';
+
+  document.getElementById('d-humidity').textContent = Math.round(c.relative_humidity_2m) + '%';
+  document.getElementById('d-wind').textContent = Math.round(c.wind_speed_10m) + ' km/h';
+  document.getElementById('d-wind-sub').textContent = 'Hướng ' + windDir(c.wind_direction_10m);
+  document.getElementById('d-precip').textContent = (c.precipitation||0).toFixed(1) + ' mm';
+  document.getElementById('d-pressure').textContent = Math.round(c.surface_pressure);
+
+  // Dải 24 giờ tới, bắt đầu từ đúng giờ hiện tại — xác định ngày/đêm theo ĐÚNG giờ mặt trời mọc/lặn thật
+  // của hôm nay (data.daily.sunrise[0]/sunset[0]) thay vì đoán cố định 6h-18h, cho chính xác theo mùa.
+  var h = data.hourly;
+  var srHour = 6, ssHour = 18;
+  try {
+    if (data.daily && data.daily.sunrise && data.daily.sunrise[0]) srHour = parseInt(data.daily.sunrise[0].slice(11,13),10);
+    if (data.daily && data.daily.sunset && data.daily.sunset[0]) ssHour = parseInt(data.daily.sunset[0].slice(11,13),10);
+  } catch(e){}
+  var nowStr = data.current.time; // 'YYYY-MM-DDTHH:mm'
+  var startIdx = h.time.indexOf(nowStr);
+  if (startIdx === -1) startIdx = 0;
+  var stripHtml = '';
+  var maxProbToday = 0;
+  for (var i = startIdx; i < Math.min(startIdx+24, h.time.length); i++){
+    var hourNum = parseInt(h.time[i].slice(11,13),10);
+    var isDayHour = hourNum >= srHour && hourNum < ssHour;
+    var lbl = (i===startIdx) ? 'Giờ này' : (hourNum + 'h');
+    var prob = h.precipitation_probability[i]||0;
+    if (prob > maxProbToday) maxProbToday = prob;
+    stripHtml += '<div class="hour-col'+(i===startIdx?' now':'')+'">'
+      + '<div class="h-temp">'+Math.round(h.temperature_2m[i])+'°</div>'
+      + miniIcon(h.weather_code[i], h.cloud_cover[i], prob, h.precipitation[i]||0, isDayHour)
+      + '<div class="h-prob">'+(prob>=8 ? prob+'%':'')+'</div>'
+      + '<div class="h-label">'+lbl+'</div>'
+      + '</div>';
+  }
+  document.getElementById('hour-strip').innerHTML = stripHtml;
+  document.getElementById('d-humidity-sub').textContent = 'Khả năng mưa tối đa ' + Math.round(maxProbToday) + '%';
+
+  // Cập nhật giờ + dòng "cập nhật" trong thẻ dải giờ
+  var now = new Date();
+  var timeStr = now.toLocaleTimeString('vi-VN');
+  document.getElementById('last-updated').textContent = timeStr;
+  document.getElementById('strip-updated').textContent = timeStr;
+
+  // Dự báo 7 ngày — tìm nhiệt độ cao/thấp toàn kỳ để chia thang thanh bar cho đều
+  var d = data.daily;
+  var globalMax = Math.max.apply(null, d.temperature_2m_max);
+  var globalMin = Math.min.apply(null, d.temperature_2m_min);
+  var span = Math.max(1, globalMax - globalMin);
+  var daysHtml = '';
+  for (var j=0; j<d.time.length; j++){
+    var dt = new Date(d.time[j]+'T00:00:00');
+    var dname = (j===0) ? 'Hôm nay' : WD[dt.getDay()] + ' ' + String(dt.getDate()).padStart(2,'0')+'/'+String(dt.getMonth()+1).padStart(2,'0');
+    var dinfo = wInfo(d.weather_code[j]);
+    var hi = Math.round(d.temperature_2m_max[j]), lo = Math.round(d.temperature_2m_min[j]);
+    var leftPct = ((lo - globalMin) / span) * 100;
+    var widthPct = ((hi - lo) / span) * 100;
+    var rp = Math.round(d.precipitation_probability_max[j]||0);
+    daysHtml += '<div class="day-item">'
+      + '<div class="day-name'+(j===0?' today':'')+'">'+dname+'</div>'
+      + '<div class="day-ico">'+miniIcon(d.weather_code[j], dinfo.ico==='cloud'?60:30, rp, rp>50?3:0, true)+'</div>'
+      + '<div class="day-rain">'+(rp>=8 ? rp+'%':'')+'</div>'
+      + '<div class="day-bar-wrap">'
+        + '<div class="day-lo">'+lo+'°</div>'
+        + '<div class="day-bar-track"><div class="day-bar-fill" style="left:'+leftPct.toFixed(0)+'%; width:'+Math.max(widthPct,8).toFixed(0)+'%"></div></div>'
+        + '<div class="day-hi">'+hi+'°</div>'
+      + '</div>'
+    + '</div>';
+  }
+  document.getElementById('days-row').innerHTML = daysHtml;
+  document.getElementById('hilo-now').innerHTML = 'Hôm nay: <b>'+Math.round(d.temperature_2m_max[0])+'°</b> / '+Math.round(d.temperature_2m_min[0])+'°';
+
+  // Ẩn gợi ý cài đặt nếu đã cài (chạy ở chế độ standalone)
+  if (window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone) {
+    document.getElementById('install-tip').style.display = 'none';
+  }
+}
+
+document.getElementById('btn-refresh').addEventListener('click', function(){
+  if (_refreshTimer) clearTimeout(_refreshTimer);
+  loadWeather();
+});
+
+// Quay lại app sau khi ẩn 1 thời gian (chuyển app khác, khoá máy...) → làm mới ngay cho đúng dữ liệu mới nhất
+document.addEventListener('visibilitychange', function(){
+  if (document.visibilityState === 'visible') {
+    if (_refreshTimer) clearTimeout(_refreshTimer);
+    loadWeather();
+  }
+});
+
+loadWeather();
+
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', function(){
+    navigator.serviceWorker.register('sw.js').catch(function(){});
+  });
+}
+</script>
+</body>
+</html>
