@@ -1,4 +1,4 @@
-const CACHE = 'troi-hom-nay-v1.0.0';
+const CACHE = 'troi-hom-nay-v1.0.1';
 const ASSETS = ['./', './index.html', './manifest.json', './icon-192.png', './icon-512.png'];
 
 self.addEventListener('install', e => {
@@ -6,9 +6,11 @@ self.addEventListener('install', e => {
   self.skipWaiting();
 });
 
+// Chỉ xoá cache CŨ CỦA APP NÀY (tiền tố riêng) — bộ nhớ cache dùng chung cả tên miền
+// nguyentai219.github.io, xoá hết sẽ làm mất bản offline của các app khác (Mủ Cao Su, Quản Lý Heo...).
 self.addEventListener('activate', e => {
   e.waitUntil(
-    caches.keys().then(keys => Promise.all(keys.filter(k => k !== CACHE).map(k => caches.delete(k))))
+    caches.keys().then(keys => Promise.all(keys.filter(k => (k.startsWith('troi-hom-nay-')) && k !== CACHE).map(k => caches.delete(k))))
   );
   self.clients.claim();
 });
